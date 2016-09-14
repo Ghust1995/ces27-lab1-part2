@@ -33,6 +33,7 @@ type Master struct {
 	// ADD EXTRA PROPERTIES HERE //
 	///////////////////////////////
 	// Fault Tolerance
+	operationChan chan *Operation
 }
 
 type Operation struct {
@@ -77,9 +78,17 @@ func (master *Master) acceptMultipleConnections() {
 
 // handleFailingWorkers will handle workers that fails during an operation.
 func (master *Master) handleFailingWorkers() {
-	/////////////////////////
-	// YOUR CODE GOES HERE //
-	/////////////////////////
+
+	//iterating over the channel
+	for failedWorker := range master.failedWorkerChan {
+		master.workersMutex.Lock()
+
+		delete(master.workers, failedWorker.id)
+		//// Makes sense by the variable name, but doesn't by it's functionality
+		// master.totalWorkers--
+		master.workersMutex.Unlock()
+		log.Printf("The worker %d failed and has been removed from the master workers list\n", failedWorker.id)
+	}
 }
 
 // Handle a single connection until it's done, then closes it.

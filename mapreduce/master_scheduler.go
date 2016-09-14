@@ -8,10 +8,6 @@ import (
 // Schedules map operations on remote workers. This will run until InputFilePathChan
 // is closed. If there is no worker available, it'll block.
 func (master *Master) schedule(task *Task, proc string, filePathChan chan string) int {
-	//////////////////////////////////
-	// YOU WANT TO MODIFY THIS CODE //
-	//////////////////////////////////
-
 	var (
 		wg        sync.WaitGroup
 		filePath  string
@@ -22,15 +18,23 @@ func (master *Master) schedule(task *Task, proc string, filePathChan chan string
 
 	log.Printf("Scheduling %v operations\n", proc)
 
+	// Initializing new channel
+	master.operationChan = make(chan *Operation, RETRY_OPERATION_BUFFER)
 	counter = 0
 	for filePath = range filePathChan {
 		operation = &Operation{proc, counter, filePath}
 		counter++
-
-		worker = <-master.idleWorkerChan
 		wg.Add(1)
-		go master.runOperation(worker, operation, &wg)
+		master.operationChan <- operation
+		log.Printf("Sent new file\n")
 	}
+
+	go func(wg *sync.WaitGroup) {
+		for operation = range master.operationChan {
+			worker = <-master.idleWorkerChan
+			go master.runOperation(worker, operation, wg)
+		}
+	}(&wg)
 
 	wg.Wait()
 
@@ -40,10 +44,6 @@ func (master *Master) schedule(task *Task, proc string, filePathChan chan string
 
 // runOperation start a single operation on a RemoteWorker and wait for it to return or fail.
 func (master *Master) runOperation(remoteWorker *RemoteWorker, operation *Operation, wg *sync.WaitGroup) {
-	//////////////////////////////////
-	// YOU WANT TO MODIFY THIS CODE //
-	//////////////////////////////////
-
 	var (
 		err  error
 		args *RunArgs
@@ -56,8 +56,8 @@ func (master *Master) runOperation(remoteWorker *RemoteWorker, operation *Operat
 
 	if err != nil {
 		log.Printf("Operation %v '%v' Failed. Error: %v\n", operation.proc, operation.id, err)
-		wg.Done()
 		master.failedWorkerChan <- remoteWorker
+		master.operationChan <- operation
 	} else {
 		wg.Done()
 		master.idleWorkerChan <- remoteWorker
